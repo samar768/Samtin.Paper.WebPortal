@@ -1,0 +1,405 @@
+# VS Code REST Client examples; enable its cookie jar.
+# Prefer browser login. Never save a password/cookie/token in this file.
+# Supply ERP_POC_PASSWORD privately through the client process environment.
+# Refresh authenticatedCsrf after login and before each unsafe request.
+# Replace payload/id/version ONLY for your own synthetic development order.
+@origin = http://localhost:3000
+@base = {{origin}}/api/poc
+@orderId = REPLACE_WITH_URL_ENCODED_SYNTHETIC_DOCID
+@version = REPLACE_WITH_CURRENT_VERSION
+@context = {{selectedCompany.response.body.$.contextVersion}}
+@payload = {"metadataVersion":"REPLACE_WITH_CURRENT_METADATA_VERSION","version":null,"idempotencyKey":"d3190795-3ab8-4f4a-bcb5-647e16961374","header":{},"lines":[],"headerExpenses":[],"lineExpenses":[],"terms":[]}
+
+### Crystal Sales Order sample (requires the feature flag and a selected, authenticated View + Print context)
+GET {{base}}/orders/{{orderId}}/print.pdf
+X-ERP-Context: {{context}}
+Accept: application/pdf
+
+### A missing or out-of-scope order returns 404 when printing is enabled and authorized
+GET {{base}}/orders/NOT-A-SAVED-ORDER/print.pdf
+X-ERP-Context: {{context}}
+Accept: application/pdf
+
+### Anonymous CSRF token
+# @name anonymousCsrf
+GET {{base}}/csrf
+
+### Login (do not commit environment secrets or captured responses)
+POST {{base}}/session
+Origin: {{origin}}
+Content-Type: application/json
+X-CSRF-TOKEN: {{anonymousCsrf.response.body.$.token}}
+
+{"username":"SA","password":"{{$processEnv ERP_POC_PASSWORD}}"}
+
+### Current verified identity; context is null until company selection
+GET {{base}}/session
+
+### Company/year options and authorized sites (no selected context required)
+GET {{base}}/companies
+
+### Token for the current authenticated identity
+# @name authenticatedCsrf
+GET {{base}}/csrf
+
+### Select a company/year and site; null is automatic ONLY for a single authorized site
+# @name selectedCompany
+PUT {{base}}/session/context
+Origin: {{origin}}
+Content-Type: application/json
+X-CSRF-TOKEN: {{authenticatedCsrf.response.body.$.token}}
+
+{"company":"26","site":"HO","expectedVersion":null}
+
+# For a later switch, expectedVersion must equal the current contextVersion from GET /companies.
+# Older financial-year contexts are read-only; only the configured company/site allows order writes.
+# Every module request includes X-ERP-Context. A missing/stale revision returns 409, never a fallback scope.
+
+### Database-backed navigation for the selected company
+GET {{base}}/navigation
+X-ERP-Context: {{context}}
+
+### Browse the SORD Distance lookup from the live terms configuration
+# Validate and Save accept {"Code":"45","ValueCode":"<selected key>"} for the current Distance term.
+GET {{base}}/value-help/terms-SORD-45/options?search=&page=0
+X-ERP-Context: {{context}}
+
+### Search, zero-based page, at most 25 results
+GET {{base}}/orders?search=POC&page=0
+X-ERP-Context: {{context}}
+
+### Personalized paging/sort (still scoped by server permissions)
+# Sizes: 10,25,50,100; sort: reference,date,buyer,gross,state; direction: asc,desc.
+# Reference ordering is textual. DocId descending breaks ties for stable pages.
+GET {{base}}/orders?search=POC&page=0&pageSize=10&sort=gross&direction=asc
+X-ERP-Context: {{context}}
+
+### Personal preferences, authenticated user/company only (no identity parameters)
+GET {{base}}/preferences/listings/sales-orders
+X-ERP-Context: {{context}}
+
+### Save only your listing presentation; last explicit save wins
+PUT {{base}}/preferences/listings/sales-orders
+X-ERP-Context: {{context}}
+Origin: {{origin}}
+Content-Type: application/json
+X-CSRF-TOKEN: {{authenticatedCsrf.response.body.$.token}}
+
+{"schemaVersion":1,"columns":[{"id":"reference","visible":true,"width":140},{"id":"date","visible":true,"width":130},{"id":"buyer","visible":true,"width":300},{"id":"gross","visible":true,"width":160},{"id":"state","visible":true,"width":130}],"density":"compact","pageSize":25,"sortColumn":"date","sortDirection":"desc"}
+
+### Reset only your listing preference; no order changes
+DELETE {{base}}/preferences/listings/sales-orders
+X-ERP-Context: {{context}}
+Origin: {{origin}}
+X-CSRF-TOKEN: {{authenticatedCsrf.response.body.$.token}}
+
+### Invalid query is rejected (400), not interpolated into SQL
+GET {{base}}/orders?pageSize=10000&sort=unknown
+X-ERP-Context: {{context}}
+
+### New aggregate defaults, including provisional numbers (no reservation/write)
+GET {{base}}/orders/defaults
+X-ERP-Context: {{context}}
+
+# For new automatic numbering, include "automaticReference":true in the payload.
+# Header.RecId is the displayed suggestion, not a reservation; Save recalculates it.
+# Omit the flag or set false for a manual override; duplicate references return 409.
+# Updates must use false. Never send V_No as an editable header field.
+# Only active item rows belong in lines/lineExpenses; omit untouched UI entry rows.
+
+### New line defaults and expenses
+GET {{base}}/orders/line-defaults
+X-ERP-Context: {{context}}
+
+### Active voucher choices (requires Sales Order Add)
+GET {{base}}/orders/voucher-types
+X-ERP-Context: {{context}}
+
+### Voucher-specific draft, without reserving a number
+GET {{base}}/orders/defaults?voucherType=SODRL
+X-ERP-Context: {{context}}
+
+### Voucher-specific line template
+GET {{base}}/orders/line-defaults?voucherType=SODRL
+X-ERP-Context: {{context}}
+
+### Item tax-band defaults (replace the code with an eligible finished item)
+GET {{base}}/orders/item-expense-defaults?itemCode=REPLACE_WITH_ITEM_CODE
+X-ERP-Context: {{context}}
+
+### Authorized fields and current schema version
+GET {{base}}/metadata/orders
+X-ERP-Context: {{context}}
+
+### Allowlisted lookup; also forms/items/bf/gsm/orderTypes/yesNo/sizeUnits/grain
+GET {{base}}/lookups/parties?search=
+X-ERP-Context: {{context}}
+
+### Sales Order items: only ItemMast.ItemType='FM', with existing site scope
+GET {{base}}/lookups/items?search=
+X-ERP-Context: {{context}}
+
+# New/replaced non-FM items return 422 with errors["lines[0].ItemCode"].
+# An unchanged historical non-FM item is allowed only on its original V_SNo/document.
+
+### SQL-configured value-help definition; all 11 existing Sales lookup fields are opted in
+GET {{base}}/value-help/parties
+X-ERP-Context: {{context}}
+
+### Parameterized description/code search, zero-based page, configured table columns
+GET {{base}}/value-help/parties/options?search=&page=0
+X-ERP-Context: {{context}}
+
+### Hydrate 1-100 saved FK codes, including codes outside the first search page
+# Replace the placeholder with an authorized actual party code.
+# MissingKeys is explicit; labels/cells are response-only, not order-save fields.
+POST {{base}}/value-help/parties/resolve
+X-ERP-Context: {{context}}
+Origin: {{origin}}
+Content-Type: application/json
+X-CSRF-TOKEN: {{authenticatedCsrf.response.body.$.token}}
+
+{"keys":["REPLACE_WITH_PARTY_CODE"]}
+
+### Windows item columns, including the 40px Grain column; finished products only
+GET {{base}}/value-help/items/options?search=&page=0
+X-ERP-Context: {{context}}
+
+### Against Form: Name and Per columns
+GET {{base}}/value-help/forms/options?search=&page=0
+X-ERP-Context: {{context}}
+
+### Static choice views also retain codes (for example L/S), not labels
+GET {{base}}/value-help/grain/options?search=&page=0
+X-ERP-Context: {{context}}
+
+# Other registered IDs: consignees, delivery-parties, bf, gsm, order-types, yes-no, size-units.
+# They use the same definition/options/resolve endpoints and workspace/authentication guards.
+
+### Shared BF/GSM master metadata and server-generated defaults
+GET {{base}}/masters/bf/form
+X-ERP-Context: {{context}}
+
+### Master list follows its own menu View grant, independently of Sales
+GET {{base}}/masters/gsm/records?search=&page=0
+X-ERP-Context: {{context}}
+
+### Create only in the explicitly write-approved POC workspace
+# Replace metadataVersion from /masters/bf/form; retain the UUID unchanged for a retry.
+POST {{base}}/masters/bf/records
+X-ERP-Context: {{context}}
+Origin: {{origin}}
+Content-Type: application/json
+X-CSRF-TOKEN: {{authenticatedCsrf.response.body.$.token}}
+
+{"metadataVersion":"REPLACE_WITH_MASTER_METADATA_VERSION","version":null,"idempotencyKey":"REPLACE_WITH_NEW_UUID","values":{"Name":"REPLACE_WITH_APPROVED_DESCRIPTION"}}
+
+### View/edit form; update with PUT /masters/bf/records/{key} and its current record version
+GET {{base}}/masters/bf/form?recordId=REPLACE_WITH_MASTER_KEY
+X-ERP-Context: {{context}}
+
+### Edit only your approved master; retain the UUID unchanged for an identical retry
+PUT {{base}}/masters/bf/records/REPLACE_WITH_MASTER_KEY
+X-ERP-Context: {{context}}
+Origin: {{origin}}
+Content-Type: application/json
+X-CSRF-TOKEN: {{authenticatedCsrf.response.body.$.token}}
+
+{"metadataVersion":"REPLACE_WITH_MASTER_METADATA_VERSION","version":"REPLACE_WITH_CURRENT_RECORD_VERSION","idempotencyKey":"REPLACE_WITH_NEW_UUID","values":{"Name":"REPLACE_WITH_APPROVED_DESCRIPTION"}}
+
+### Delete only your own unreferenced synthetic master
+DELETE {{base}}/masters/bf/records/REPLACE_WITH_SYNTHETIC_MASTER_KEY
+X-ERP-Context: {{context}}
+Origin: {{origin}}
+Content-Type: application/json
+X-CSRF-TOKEN: {{authenticatedCsrf.response.body.$.token}}
+
+{"version":"REPLACE_WITH_CURRENT_RECORD_VERSION"}
+
+### Print permission is checked before returning this bounded filtered dataset
+GET {{base}}/masters/bf/print?search=REPLACE_WITH_FILTER
+X-ERP-Context: {{context}}
+
+### Reviewed site-specific master; Site_Code is never accepted in values
+GET {{base}}/masters/godowns/form
+X-ERP-Context: {{context}}
+
+### Administrator audit history; omit recordId to inspect the master-wide authorized history
+GET {{base}}/masters/bf/audit?recordId=REPLACE_WITH_MASTER_KEY&page=0
+X-ERP-Context: {{context}}
+
+### All reviewed Windows Master environment fields, choices and tab layout
+GET {{base}}/environment-settings/form
+X-ERP-Context: {{context}}
+
+### Authorized, current-site Environment audit
+GET {{base}}/environment-settings/audit?page=0
+X-ERP-Context: {{context}}
+
+### Save settings (populate all Windows-required values; do not execute as a sample)
+# PUT {{base}}/environment-settings/
+# X-ERP-Context: {{context}}
+# X-CSRF-TOKEN: {{csrf}}
+# Content-Type: application/json
+#
+# {"metadataVersion":"FORM_DEFINITION_VERSION","version":"FORM_RECORD_VERSION_OR_NULL",
+#  "idempotencyKey":"STABLE_UUID_FOR_UNCHANGED_RETRY","values":{"InchKG":"EXPLICIT_REVIEWED_VALUE"}}
+
+### Reopen own synthetic aggregate
+GET {{base}}/orders/{{orderId}}
+X-ERP-Context: {{context}}
+
+### Validate/calculate without committing; add ?id={{orderId}} for an update
+# Field validation problems include traceId and errors, for example:
+# "errors":{"lines[0].ItemCode":["..."],"lines[0].QtySDU":["..."]}
+# Header/term/expense locations use header.Key, terms[0].Value,
+# headerExpenses[0].Per and lineExpenses[0][0].Per respectively.
+POST {{base}}/orders/calculate
+X-ERP-Context: {{context}}
+Origin: {{origin}}
+Content-Type: application/json
+X-CSRF-TOKEN: {{authenticatedCsrf.response.body.$.token}}
+
+{{payload}}
+
+### Incomplete draft calculation: use current metadata and editable expense inputs
+# No header/idempotency key/terms needed; incomplete lines are allowed. Save still validates fully.
+# Up to 100 lines with matching lineExpenses. Empty expense inputs use configured defaults.
+POST {{base}}/orders/draft-calculation
+X-ERP-Context: {{context}}
+Origin: {{origin}}
+Content-Type: application/json
+X-CSRF-TOKEN: {{authenticatedCsrf.response.body.$.token}}
+
+{"metadataVersion":"REPLACE_WITH_CURRENT_METADATA_VERSION","lines":[{"SizeUnit":"CM","SizeReel":"20","Qty":"100","Reel":"0","QtySDU":"0","Rate":"2.125"}],"headerExpenses":[],"lineExpenses":[[]]}
+
+### Tolerance percentages: expected excess 2.623, shortage 1.543, limits 126.079 / 121.913
+POST {{base}}/orders/tolerance
+X-ERP-Context: {{context}}
+Origin: {{origin}}
+Content-Type: application/json
+X-CSRF-TOKEN: {{authenticatedCsrf.response.body.$.token}}
+
+{"quantity":"123.456","excess":"0","shortage":"0","excessPercent":"2.125","shortagePercent":"1.25"}
+
+### Invalid tolerance: 422, highlighted shortage; null percentage means explicit quantity mode
+POST {{base}}/orders/tolerance
+X-ERP-Context: {{context}}
+Origin: {{origin}}
+Content-Type: application/json
+X-CSRF-TOKEN: {{authenticatedCsrf.response.body.$.token}}
+
+{"quantity":"100","excess":"0","shortage":"100.001","excessPercent":null,"shortagePercent":null}
+
+### Create; keep the SAME UUID and SAME payload for uncertain retries
+POST {{base}}/orders
+X-ERP-Context: {{context}}
+Origin: {{origin}}
+Content-Type: application/json
+X-CSRF-TOKEN: {{authenticatedCsrf.response.body.$.token}}
+
+{{payload}}
+
+### Update; payload must include current metadataVersion and version
+PUT {{base}}/orders/{{orderId}}
+X-ERP-Context: {{context}}
+Origin: {{origin}}
+Content-Type: application/json
+X-CSRF-TOKEN: {{authenticatedCsrf.response.body.$.token}}
+
+{{payload}}
+
+### Delete only own synthetic eligible record
+DELETE {{base}}/orders/{{orderId}}
+X-ERP-Context: {{context}}
+Origin: {{origin}}
+Content-Type: application/json
+X-CSRF-TOKEN: {{authenticatedCsrf.response.body.$.token}}
+
+{"version":"{{version}}"}
+
+### Administrator discovery; does not activate or alter tables
+GET {{base}}/metadata/discover
+X-ERP-Context: {{context}}
+
+### Administrator activation of the existing Sales Order CustomerNote column (204 on success)
+POST {{base}}/metadata/activate
+X-ERP-Context: {{context}}
+Origin: {{origin}}
+Content-Type: application/json
+X-CSRF-TOKEN: {{authenticatedCsrf.response.body.$.token}}
+
+{"section":"header","column":"CustomerNote","label":"Customer note","permission":"A"}
+
+### Authorized tasks in the selected workspace (25 rows per page)
+GET {{base}}/tasks?page=0
+X-ERP-Context: {{context}}
+
+### Task types this user may publish manually
+GET {{base}}/tasks/types
+X-ERP-Context: {{context}}
+
+### Publish a memo; reuse the key ONLY for an identical retry
+# @name publishedTask
+POST {{base}}/tasks
+X-ERP-Context: {{context}}
+Origin: {{origin}}
+Content-Type: application/json
+X-CSRF-TOKEN: {{authenticatedCsrf.response.body.$.token}}
+
+{"type":"MEMO","title":"POC team memo","body":"Please review today's Sales Order queue.","idempotencyKey":"11111111-2222-4333-8444-555555555555"}
+
+### Read an authorized task (unknown/unauthorized tasks return 404)
+GET {{base}}/tasks/{{publishedTask.response.body.$.id}}
+X-ERP-Context: {{context}}
+
+### Per-user read receipt; does NOT approve or complete a task
+POST {{base}}/tasks/{{publishedTask.response.body.$.id}}/read
+X-ERP-Context: {{context}}
+Origin: {{origin}}
+X-CSRF-TOKEN: {{authenticatedCsrf.response.body.$.token}}
+
+### Current sequential approval progress for an order
+# @name pendingApproval
+GET {{base}}/orders/{{orderId}}/approval
+X-ERP-Context: {{context}}
+
+### Decide the active stage; use BOTH current order version and request revision
+# Changing decision to Reject requires a nonblank comment. Unapproval uses its dedicated endpoint below.
+# Stale order/request revisions return 409; missing stage/ERP permissions return 403.
+POST {{base}}/orders/{{orderId}}/approval
+X-ERP-Context: {{context}}
+Origin: {{origin}}
+Content-Type: application/json
+X-CSRF-TOKEN: {{authenticatedCsrf.response.body.$.token}}
+
+{"version":"{{version}}","requestId":"{{pendingApproval.response.body.$.requestId}}","requestVersion":"{{pendingApproval.response.body.$.version}}","decision":"Approve","comment":"Reviewed in the POC."}
+
+### Copy into a clean unsaved draft; no record or task is persisted by this GET
+GET {{base}}/orders/{{orderId}}/copy
+X-ERP-Context: {{context}}
+
+### Latest approval version before reversing YOUR approved synthetic order
+# @name latestApproval
+GET {{base}}/orders/{{orderId}}/approval
+X-ERP-Context: {{context}}
+
+### Unapprove with dedicated group permission, a reason and BOTH current versions
+# Replace @version with the latest order version AFTER approval.
+# For an approved legacy record without a request, use JSON null for requestId/requestVersion.
+# Returns 403 without CanReverse/ERP rights; 409 for stale, closed, downstream-used or allocated orders.
+POST {{base}}/orders/{{orderId}}/unapprove
+X-ERP-Context: {{context}}
+Origin: {{origin}}
+Content-Type: application/json
+X-CSRF-TOKEN: {{authenticatedCsrf.response.body.$.token}}
+
+{"version":"{{version}}","requestId":"{{latestApproval.response.body.$.requestId}}","requestVersion":"{{latestApproval.response.body.$.version}}","reason":"Synthetic POC correction; restart approval after editing."}
+
+### Logout revokes the server session
+DELETE {{base}}/session
+Origin: {{origin}}
+X-CSRF-TOKEN: {{authenticatedCsrf.response.body.$.token}}
+
+### Development-only OpenAPI (direct API address)
+GET http://localhost:5080/openapi/v1.json

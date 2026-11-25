@@ -1,0 +1,81 @@
+// Build with .NET Framework csc.exe /platform:x86, using GAC references
+// at version 13.0.2000.0 (public key token 692fbea5521e1304):
+// CrystalDecisions.CrystalReports.Engine, CrystalDecisions.Shared, and
+// CrystalDecisions.ReportAppServer.{ClientDoc,Controllers,DataDefModel,
+// ReportDefModel,DataSetConversion,CommLayer,CommonObjectModel}.
+// Run the executable with one argument: the destination path for SaleOrder.rpt.
+// The .txt suffix keeps this standalone utility out of the API's compile glob.
+using System;
+using System.Data;
+using System.IO;
+using CrystalDecisions.ReportAppServer.DataSetConversion;
+using CrystalDecisions.ReportAppServer.ReportDefModel;
+using ReportDocument = CrystalDecisions.CrystalReports.Engine.ReportDocument;
+
+internal static class AuthorSaleOrder
+{
+    private static void Main(string[] args)
+    {
+        string path = Path.GetFullPath(args[0]);
+        using (var data = new DataSet("SaleOrderData"))
+        using (var report = new ReportDocument())
+        {
+            string[] names = { "OrderNo", "OrderDate", "Customer", "Item", "Qty", "Rate", "Amount" };
+            string[] labels = { "Order No.", "Order Date", "Customer", "Item", "Qty", "Rate", "Amount" };
+            int[] widths = { 1410, 1410, 2050, 2280, 740, 1000, 1170 };
+            var schema = data.Tables.Add("SaleOrderRows");
+            foreach (string name in names)
+                schema.Columns.Add(name, typeof(string));
+
+            var client = report.ReportClientDocument;
+            client.New();
+            client.DatabaseController.AddDataSource(DataSetConverter.Convert(data));
+            var fields = client.DatabaseController.Database.Tables[0].DataFields;
+            var definition = client.ReportDefinition;
+            var objects = client.ReportDefController.ReportObjectController;
+            var title = Text("Sales Order", 0, 65, 7600, 375, 18, true);
+            objects.Add(title, definition.ReportHeaderArea.Sections[0], -1);
+            int left = 0;
+            for (int i = 0; i < names.Length; i++)
+            {
+                var heading = Text(labels[i], left, 270, widths[i] - 100, 265, 10, true);
+                var field = new FieldObjectClass();
+                field.Name = names[i];
+                field.DataSourceName = fields[i].FormulaForm;
+                field.FieldValueType = fields[i].Type;
+                field.Left = left;
+                field.Top = 0;
+                field.Width = widths[i] - 100;
+                field.Height = 216;
+                objects.Add(heading, definition.PageHeaderArea.Sections[0], -1);
+                objects.Add(field, definition.DetailArea.Sections[0], -1);
+                left += widths[i];
+            }
+            client.SaveAs(Path.GetFileName(path), Path.GetDirectoryName(path),
+                (int)CrystalDecisions.ReportAppServer.ClientDoc.CdReportClientDocumentSaveAsOptionsEnum.cdReportClientDocumentSaveAsOverwriteExisting);
+            client.Close();
+        }
+    }
+
+    private static TextObjectClass Text(string text, int left, int top, int width, int height, int size, bool bold)
+    {
+        var element = new ParagraphTextElementClass();
+        element.Text = text;
+        var font = new FontClass();
+        font.Name = "Arial";
+        font.Size = size;
+        font.Bold = bold;
+        var color = new FontColorClass();
+        color.Font = font;
+        element.FontColor = color;
+        var paragraph = new ParagraphClass();
+        paragraph.ParagraphElements.Add(element);
+        var obj = new TextObjectClass();
+        obj.Left = left;
+        obj.Top = top;
+        obj.Width = width;
+        obj.Height = height;
+        obj.Paragraphs.Add(paragraph);
+        return obj;
+    }
+}

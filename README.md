@@ -158,6 +158,18 @@ Session idle timeout is 30 minutes, maximum server lifetime eight hours. Logout 
 
 API contracts: [OpenAPI](http://localhost:5080/openapi/v1.json), [HTTP requests](backend/Techno.Paper.Api/Techno.Paper.Api.http), [DTOs](backend/Techno.Paper.Api/Contracts.cs).
 
+### Local Swagger UI
+
+Run `npm ci` at the repository root. Start the API from its project folder as above, with `$env:Poc__EnableSwaggerUi = 'true'` set in that terminal before launch. Open [Swagger via the local portal](http://localhost:3000/api/poc/swagger/index.html); this keeps API calls on the origin already allowed by `Poc:PublicOrigin`. The [direct API page](http://localhost:5080/api/swagger/index.html) is available for browsing and GET requests only. Swagger UI is opt-in in Development, serves local assets only, and is for loopback development, not tunneled, proxied public, or Vercel deployments.
+
+Sign in and select a workspace in the portal, then click **Load current workspace** in Swagger. This pins the context revision for the API calls; load it again after deliberately switching workspaces. Expand **GET `/api/orders`**, click **Try it out**, then **Execute**. For write methods, use the portal URL and an isolated test database. Swagger obtains the existing CSRF token but does not bypass login, grants, context checks, or write restrictions.
+
+## Hosting on Render (development POC)
+
+[render.yaml](render.yaml) defines two services: `paper-api` (private, Docker, built from [backend/Techno.Paper.Api](backend/Techno.Paper.Api/Dockerfile)) and `samtin-paper-webportal` (public Next.js). The portal reaches the API at `http://paper-api:10000` through `POC_API_URL`; the API is not publicly addressable.
+
+The API refuses non-Development startup unless `Poc:AllowHostedDevelopmentDatabase` is `true`. Only the Render API service sets it. Enter `Poc__ControlConnection` and `Poc__TransactionConnection` as secrets in the Render dashboard, pointing only at an approved development database. `Poc__PublicOrigin` must equal the portal's public URL, or the API rejects requests with `invalid_origin`. If Render gives the portal a different hostname, update both `Poc__PublicOrigin` and the `render.yaml` value.
+
 ## New fields without deployment
 
 Only approved optional scalar columns on `SOrd`/`SOrdDet` are eligible. Newly added columns are **not** automatically public.

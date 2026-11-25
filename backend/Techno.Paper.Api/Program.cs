@@ -10,7 +10,7 @@ using Techno.Paper.Api.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true);
-if (!builder.Environment.IsDevelopment())
+if (!builder.Environment.IsDevelopment() && !builder.Configuration.GetValue<bool>("Poc:AllowHostedDevelopmentDatabase"))
     throw new InvalidOperationException("This development-database POC cannot run in production.");
 var options = builder.Configuration.GetSection("Poc").Get<PocOptions>() ?? new PocOptions();
 if (string.IsNullOrWhiteSpace(options.ControlConnection) || string.IsNullOrWhiteSpace(options.TransactionConnection))
@@ -97,6 +97,8 @@ app.Use(async (context, next) =>
     await next(context);
 });
 app.MapOpenApi();
+if (app.Environment.IsDevelopment() && builder.Configuration.GetValue<bool>("Poc:EnableSwaggerUi"))
+    app.MapDevelopmentSwagger();
 app.MapSession();
 app.MapOrders();
 app.MapValueHelp();

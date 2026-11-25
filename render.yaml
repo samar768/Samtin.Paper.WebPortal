@@ -1,0 +1,24 @@
+services:
+  - type: pserv
+    name: paper-api
+    runtime: docker
+    dockerfilePath: ./backend/Techno.Paper.Api/Dockerfile
+    dockerContext: ./backend/Techno.Paper.Api
+    envVars:
+      - key: Poc__AllowHostedDevelopmentDatabase
+        value: "true"
+      - key: Poc__PublicOrigin
+        value: https://samtin-paper-webportal.onrender.com
+      - key: Poc__ControlConnection
+        sync: false
+      - key: Poc__TransactionConnection
+        sync: false
+
+  - type: web
+    name: samtin-paper-webportal
+    runtime: node
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    envVars:
+      - key: POC_API_URL
+        value: http://paper-api:10000

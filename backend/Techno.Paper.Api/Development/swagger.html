@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PaperSoft API | Local Swagger UI</title>
+  <link rel="stylesheet" href="./swagger-ui.css">
+</head>
+<body>
+  <div class="swagger-ui">
+    <div class="wrapper">
+      <h1>PaperSoft local API testing</h1>
+      <p>Sign in and select a workspace in the portal first. Load its context below, then select an endpoint and click Try it out.</p>
+      <p>Use an isolated test database for write operations. Normal permissions still apply.</p>
+      <label for="erp-context">ERP workspace context</label>
+      <input id="erp-context" autocomplete="off" spellcheck="false">
+      <button id="load-context" class="btn" type="button">Load current workspace</button>
+      <span id="context-status" role="status"></span>
+    </div>
+  </div>
+  <main id="swagger-ui"></main>
+  <script src="./swagger-ui-bundle.js"></script>
+  <script src="./setup.js"></script>
+</body>
+</html>

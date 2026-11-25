@@ -14,6 +14,7 @@ public sealed class PocOptions
     public string MetadataAdministrator { get; set; } = "";
     public bool DevelopmentWritesApproved { get; set; }
     public bool CrystalSalesOrderSample { get; set; }
+    public bool AllowHostedDevelopmentDatabase { get; set; }
 }
 
 public sealed class Database(PocOptions options)
